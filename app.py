@@ -1,4 +1,5 @@
 import os
+import shutil
 import signal
 import tempfile
 from pathlib import Path
@@ -10,6 +11,14 @@ import config
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload limit
+
+
+def _ffmpeg_available() -> bool:
+    """Check whether FFmpeg is installed and on PATH."""
+    return shutil.which("ffmpeg") is not None
+
+
+FFMPEG_AVAILABLE = _ffmpeg_available()
 
 
 @app.route("/")
@@ -56,7 +65,9 @@ def analyze():
 
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
-    return jsonify(config.load())
+    cfg = config.load()
+    cfg["ffmpeg_available"] = FFMPEG_AVAILABLE
+    return jsonify(cfg)
 
 
 @app.route("/api/settings", methods=["POST"])
