@@ -2,6 +2,8 @@
 
 Analyze MP3 files for their **BPM** (beats per minute) and **beat offset** (lag in milliseconds) for use in the rhythm game [Dead As Disco](https://store.steampowered.com/app/3703800/Dead_As_Disco/).
 
+![Sample](https://github.com/xJeris/songanalyzer/blob/main/img/sample.png?raw=true)
+
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.1-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
