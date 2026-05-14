@@ -20,7 +20,7 @@ Analyze audio files (mp3, wav, ogg, flac, aac, m4a) for their **BPM** (beats per
 - **Analysis history** capped at 50 entries with copy/export
 - **Configurable analysis duration** — default 60 seconds, or analyze the full song
 - **Persistent settings** saved to `config.json`
-- **AAC, M4A Support** If FFMpeg is installed
+- **AAC, M4A Support** If FFMpeg is installed [https://ffmpeg.org/download.html, https://www.gfx.nl/ffmpeg/]
 
 ## Quick Start
 
