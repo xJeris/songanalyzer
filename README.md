@@ -32,7 +32,7 @@ Analyze MP3 files for their **BPM** (beats per minute) and **beat offset** (lag 
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/SongAnalyzer.git
+git clone https://github.com/xJeris/SongAnalyzer.git
 cd SongAnalyzer
 
 # Create a virtual environment
