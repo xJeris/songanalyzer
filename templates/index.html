@@ -108,6 +108,27 @@
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
 
+        // Supported formats — base set + FFmpeg extras
+        const baseExtensions = ['mp3', 'wav', 'flac', 'ogg'];
+        const ffmpegExtensions = ['m4a', 'aac'];
+        let supportedExtensions = [...baseExtensions];
+
+        // Check FFmpeg availability on load and expand supported formats
+        (async function initFormats() {
+            try {
+                const resp = await fetch('/api/settings');
+                const data = await resp.json();
+                if (data.ffmpeg_available) {
+                    supportedExtensions = [...baseExtensions, ...ffmpegExtensions];
+                    const acceptStr = supportedExtensions.map(e => '.' + e).join(',')
+                        + ',audio/mpeg,audio/wav,audio/flac,audio/ogg,audio/aac,audio/mp4,audio/x-m4a';
+                    fileInput.setAttribute('accept', acceptStr);
+                }
+            } catch (e) {
+                // keep defaults
+            }
+        })();
+
         // File input change (native file picker)
         fileInput.addEventListener('change', async () => {
             if (fileInput.files.length > 0) {
@@ -135,13 +156,14 @@
             const files = [];
             for (const f of e.dataTransfer.files) {
                 const ext = f.name.toLowerCase().split('.').pop();
-                if (['mp3', 'wav', 'flac', 'ogg'].includes(ext)) {
+                if (supportedExtensions.includes(ext)) {
                     files.push(f);
                 }
             }
 
             if (files.length === 0) {
-                showError('No supported audio files found. Please drop .mp3, .wav, .flac, or .ogg files.');
+                const extList = supportedExtensions.map(e => '.' + e).join(', ');
+                showError('No supported audio files found. Please drop ' + extList + ' files.');
                 return;
             }
 
