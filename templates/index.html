@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song Analyzer — Dead As Disco</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>Song Analyzer</h1>
+                <p class="subtitle">BPM &amp; Beat Offset Detection for Dead As Disco</p>
+            </div>
+            <div class="header-actions">
+                <button class="settings-btn" onclick="openSettings()" title="Settings">&#9881;</button>
+                <button class="shutdown-btn" onclick="shutdownApp()" title="Shut down app">&#9211;</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay hidden" onclick="closeSettingsOutside(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close" onclick="closeSettings()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label class="setting-label" for="settingDefaultDir">Default Music Directory</label>
+                <p class="setting-desc">Remembered for future use (used by internal browse fallback).</p>
+                <div class="setting-row">
+                    <input type="text" id="settingDefaultDir" placeholder="C:\">
+                </div>
+
+                <label class="setting-label setting-label-gap" for="settingDuration">Analysis Duration</label>
+                <p class="setting-desc">How many seconds of audio to analyze. Use 0 for the full song (slower).</p>
+                <div class="setting-row">
+                    <input type="number" id="settingDuration" min="0" max="600" step="10" placeholder="60">
+                    <span class="setting-unit">seconds</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn-primary" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <main>
+        <section class="picker-panel">
+            <input type="file" id="fileInput" accept=".mp3,audio/mpeg" multiple hidden>
+            <div id="dropZone" class="drop-zone">
+                <div class="drop-zone-content">
+                    <div class="drop-icon">&#127925;</div>
+                    <p class="drop-text">Drag &amp; drop MP3 files here</p>
+                    <p class="drop-subtext">or</p>
+                    <button class="browse-btn" onclick="document.getElementById('fileInput').click()">Browse Files</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="results-panel">
+            <h2>Analysis Results</h2>
+            <div id="currentResult" class="result-card hidden">
+                <div class="result-header">
+                    <div class="result-filename" id="resultFilename"></div>
+                    <span class="confidence-badge" id="confidenceBadge"></span>
+                </div>
+                <div class="result-values">
+                    <div class="result-item">
+                        <span class="result-label">BPM</span>
+                        <span class="result-value" id="resultBpm"></span>
+                        <button class="copy-btn" onclick="copyValue('resultBpm')" title="Copy BPM">Copy</button>
+                        <span class="tempo-warning hidden" id="tempoWarning" title="">&#9888;</span>
+                        <span class="alt-bpm hidden" id="altBpm"></span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Beat Offset</span>
+                        <span class="result-value" id="resultOffset"></span>
+                        <span class="result-unit">ms</span>
+                        <button class="copy-btn" onclick="copyValue('resultOffset')" title="Copy offset">Copy</button>
+                    </div>
+                </div>
+                <div class="song-info" id="songInfo"></div>
+                <div class="methods-breakdown" id="methodsBreakdown"></div>
+                <div class="offset-guidance hidden" id="offsetGuidance"></div>
+                <div class="warning-text hidden" id="warningText"></div>
+            </div>
+
+            <div id="analyzing" class="analyzing hidden">
+                <div class="spinner"></div>
+                <span id="analyzingText">Analyzing...</span>
+            </div>
+
+            <div id="errorMsg" class="error-msg hidden"></div>
+
+            <div id="historyHeader" class="history-header hidden">
+                <h3 id="historyHeading">History</h3>
+                <button class="copy-btn" onclick="exportHistory()" title="Copy all results to clipboard">Copy All</button>
+            </div>
+            <div id="history" class="history"></div>
+        </section>
+    </main>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        // File input change (native file picker)
+        fileInput.addEventListener('change', async () => {
+            if (fileInput.files.length > 0) {
+                const files = Array.from(fileInput.files);
+                fileInput.value = '';  // Reset so the same file can be picked again
+                await handleFiles(files);
+            }
+        });
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+
+            const files = [];
+            for (const f of e.dataTransfer.files) {
+                if (f.name.toLowerCase().endsWith('.mp3')) {
+                    files.push(f);
+                }
+            }
+
+            if (files.length === 0) {
+                showError('No MP3 files found. Please drop .mp3 files only.');
+                return;
+            }
+
+            handleFiles(files);
+        });
+
+        async function handleFiles(files) {
+            const total = files.length;
+            for (let i = 0; i < total; i++) {
+                await analyzeFile(files[i], i + 1, total);
+            }
+        }
+
+        async function analyzeFile(file, current, total) {
+            hideError();
+            document.getElementById('currentResult').classList.add('hidden');
+            const prefix = total > 1 ? ('(' + current + '/' + total + ') ') : '';
+            document.getElementById('analyzingText').textContent = prefix + 'Analyzing ' + file.name + '...';
+            document.getElementById('analyzing').classList.remove('hidden');
+            collapseDropZone();
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Get analysis duration from settings
+            try {
+                const settingsResp = await fetch('/api/settings');
+                const settings = await settingsResp.json();
+                formData.append('duration', settings.analysis_duration || 60);
+            } catch (e) {
+                formData.append('duration', 60);
+            }
+
+            try {
+                const resp = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await resp.json();
+
+                document.getElementById('analyzing').classList.add('hidden');
+
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+
+                showResult(data);
+                addToHistory(data);
+            } catch (err) {
+                document.getElementById('analyzing').classList.add('hidden');
+                showError('Analysis failed: ' + err.message);
+            }
+        }
+
+        function showResult(data) {
+            document.getElementById('resultFilename').textContent = data.filename;
+            document.getElementById('resultBpm').textContent = data.bpm;
+            document.getElementById('resultOffset').textContent = data.offset_ms;
+
+            // Song duration info
+            const songInfoDiv = document.getElementById('songInfo');
+            if (data.song_duration) {
+                const songLen = formatTime(data.song_duration);
+                const analyzedLen = formatTime(data.analyzed_duration);
+                const partial = data.analyzed_duration < data.song_duration - 1;
+                let infoHtml = '<span class="info-item">Duration: ' + songLen + '</span>';
+                if (partial) {
+                    infoHtml += '<span class="info-sep">|</span>';
+                    infoHtml += '<span class="info-item">Analyzed: first ' + analyzedLen + '</span>';
+                }
+                songInfoDiv.innerHTML = infoHtml;
+            } else {
+                songInfoDiv.innerHTML = '';
+            }
+
+            // Alt BPM (half/double)
+            const altEl = document.getElementById('altBpm');
+            if (data.alt_bpm) {
+                altEl.textContent = 'Try ' + data.alt_bpm;
+                altEl.onclick = function() { swapBpm(data.bpm, data.alt_bpm); };
+                altEl.classList.remove('hidden');
+            } else {
+                altEl.classList.add('hidden');
+            }
+
+            // Confidence badge
+            const badge = document.getElementById('confidenceBadge');
+            badge.textContent = data.confidence + ' confidence';
+            badge.className = 'confidence-badge confidence-' + data.confidence;
+
+            // Methods breakdown
+            const methodsDiv = document.getElementById('methodsBreakdown');
+            if (data.methods && data.methods.length > 0) {
+                let html = '<div class="methods-title">Algorithm Comparison</div>';
+                for (const m of data.methods) {
+                    const match = Math.abs(m.bpm - data.bpm) / data.bpm < 0.05;
+                    const icon = match ? '&#10003;' : '&#10007;';
+                    const cls = match ? 'method-match' : 'method-mismatch';
+                    html += '<div class="method-row ' + cls + '">';
+                    html += '<span class="method-icon">' + icon + '</span>';
+                    html += '<span class="method-name">' + escapeHtml(m.name) + '</span>';
+                    html += '<span class="method-bpm">' + m.bpm + ' BPM</span>';
+                    if (m.offset_ms !== null) {
+                        html += '<span class="method-offset">' + m.offset_ms + ' ms</span>';
+                    } else {
+                        html += '<span class="method-offset method-na">n/a</span>';
+                    }
+                    html += '</div>';
+                }
+                methodsDiv.innerHTML = html;
+            } else {
+                methodsDiv.innerHTML = '';
+            }
+
+            // Offset guidance
+            const guidanceDiv = document.getElementById('offsetGuidance');
+            const offsets = (data.methods || []).filter(m => m.offset_ms !== null);
+            if (offsets.length >= 2) {
+                const sorted = [...offsets].sort((a, b) => a.offset_ms - b.offset_ms);
+                const minOff = sorted[0].offset_ms;
+                const maxOff = sorted[sorted.length - 1].offset_ms;
+                const diff = maxOff - minOff;
+
+                // Check if any offset-providing method has a mismatched BPM
+                const agreeing = offsets.filter(m => m.bpm_agrees);
+                const disagreeing = offsets.filter(m => !m.bpm_agrees);
+                const hasOutlier = disagreeing.length > 0 && agreeing.length > 0;
+
+                if (diff > 200) {
+                    let ghtml = '<div class="guidance-title">Offset Differs Between Methods</div>';
+
+                    if (hasOutlier) {
+                        const trusted = agreeing.map(m => escapeHtml(m.name)).join(' & ');
+                        const outlier = disagreeing.map(m => escapeHtml(m.name)).join(' & ');
+                        ghtml += '<p class="guidance-text"><strong>' + outlier
+                               + '</strong> detected a different BPM, so its offset may be tracking '
+                               + 'a different rhythmic pattern. <strong>' + trusted
+                               + '</strong> agrees with the consensus BPM, so its offset is pre-selected.</p>';
+                    } else {
+                        ghtml += '<p class="guidance-text">The algorithms detected different first-beat positions. '
+                               + 'This is normal — each algorithm uses a different strategy to find where beats start.</p>';
+                    }
+
+                    ghtml += '<p class="guidance-text guidance-tip">Click below to choose which offset to use:</p>';
+                    ghtml += '<div class="guidance-choices">';
+                    for (const m of sorted) {
+                        const active = m.offset_ms === data.offset_ms ? ' guidance-active' : '';
+                        const dimmed = (!m.bpm_agrees && hasOutlier) ? ' guidance-dimmed' : '';
+                        ghtml += '<button class="guidance-choice' + active + dimmed + '" onclick="selectOffset('
+                               + m.offset_ms + ', this)">'
+                               + m.offset_ms + ' ms <span class="guidance-method">'
+                               + escapeHtml(m.name) + '</span></button>';
+                    }
+                    ghtml += '</div>';
+                    guidanceDiv.innerHTML = ghtml;
+                    guidanceDiv.classList.remove('hidden');
+                } else {
+                    guidanceDiv.classList.add('hidden');
+                    guidanceDiv.innerHTML = '';
+                }
+            } else {
+                guidanceDiv.classList.add('hidden');
+                guidanceDiv.innerHTML = '';
+            }
+
+            // Tempo warning
+            const warningIcon = document.getElementById('tempoWarning');
+            const warningText = document.getElementById('warningText');
+
+            if (data.tempo_unstable) {
+                warningIcon.classList.remove('hidden');
+                warningIcon.title = data.warning;
+                warningText.textContent = data.warning;
+                warningText.classList.remove('hidden');
+            } else {
+                warningIcon.classList.add('hidden');
+                warningText.classList.add('hidden');
+            }
+
+            document.getElementById('currentResult').classList.remove('hidden');
+        }
+
+        function swapBpm(oldBpm, newBpm) {
+            const bpmEl = document.getElementById('resultBpm');
+            const altEl = document.getElementById('altBpm');
+            const current = parseFloat(bpmEl.textContent);
+            const other = (Math.abs(current - oldBpm) < 0.01) ? newBpm : oldBpm;
+            bpmEl.textContent = other;
+            const remaining = (Math.abs(other - oldBpm) < 0.01) ? newBpm : oldBpm;
+            altEl.textContent = 'Try ' + remaining;
+
+            if (latestHistoryEntry) {
+                const bpmSpan = latestHistoryEntry.querySelector('.history-bpm');
+                if (bpmSpan) bpmSpan.textContent = 'BPM: ' + other;
+            }
+        }
+
+        let latestHistoryEntry = null;
+
+        function addToHistory(data) {
+            document.getElementById('historyHeader').classList.remove('hidden');
+            const container = document.getElementById('history');
+
+            const entry = document.createElement('div');
+            entry.className = 'history-entry';
+
+            const displayOffset = document.getElementById('resultOffset').textContent;
+
+            let html = '<span class="history-name">' + escapeHtml(data.filename) + '</span>';
+            html += '<span class="history-confidence confidence-' + data.confidence + '">' + data.confidence + '</span>';
+            html += '<span class="history-bpm">BPM: ' + data.bpm;
+            if (data.tempo_unstable) html += ' &#9888;';
+            html += '</span>';
+            html += '<span class="history-offset">Offset: ' + displayOffset + ' ms</span>';
+
+            entry.innerHTML = html;
+            container.prepend(entry);
+            latestHistoryEntry = entry;
+
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function exportHistory() {
+            const container = document.getElementById('history');
+            const entries = container.querySelectorAll('.history-entry');
+            if (entries.length === 0) return;
+
+            const lines = [];
+            entries.forEach(entry => {
+                const name = entry.querySelector('.history-name').textContent;
+                const bpm = entry.querySelector('.history-bpm').textContent;
+                const offset = entry.querySelector('.history-offset').textContent;
+                lines.push(name + ' | ' + bpm + ' | ' + offset);
+            });
+
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const btn = document.querySelector('#historyHeader .copy-btn');
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = orig; }, 1200);
+            });
+        }
+
+        let dropZoneCollapsed = false;
+
+        function collapseDropZone() {
+            if (dropZoneCollapsed) return;
+            dropZoneCollapsed = true;
+            document.querySelector('main').classList.add('layout-collapsed');
+            const dz = document.getElementById('dropZone');
+            dz.classList.add('drop-zone-collapsed');
+            dz.querySelector('.drop-zone-content').innerHTML =
+                '<p class="drop-text-small">Drop more files here or '
+                + '<button class="browse-btn-small" onclick="event.stopPropagation(); document.getElementById(\'fileInput\').click()">browse</button>'
+                + '</p>';
+        }
+
+        function copyValue(elementId) {
+            const value = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(value).then(() => {
+                const btn = document.getElementById(elementId).nextElementSibling;
+                if (btn && btn.classList.contains('copy-btn')) {
+                    const orig = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => { btn.textContent = orig; }, 1200);
+                }
+            });
+        }
+
+        function selectOffset(value, btn) {
+            document.getElementById('resultOffset').textContent = value;
+            document.querySelectorAll('.guidance-choice').forEach(b => b.classList.remove('guidance-active'));
+            btn.classList.add('guidance-active');
+
+            if (latestHistoryEntry) {
+                const offsetSpan = latestHistoryEntry.querySelector('.history-offset');
+                if (offsetSpan) offsetSpan.textContent = 'Offset: ' + value + ' ms';
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.round(seconds % 60);
+            return mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('errorMsg').classList.add('hidden');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Settings
+        async function openSettings() {
+            try {
+                const resp = await fetch('/api/settings');
+                const data = await resp.json();
+                document.getElementById('settingDefaultDir').value = data.default_directory || '';
+                document.getElementById('settingDuration').value = data.analysis_duration || 60;
+            } catch (err) {
+                // fall through with empty field
+            }
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function closeSettingsOutside(event) {
+            if (event.target === document.getElementById('settingsModal')) {
+                closeSettings();
+            }
+        }
+
+        async function saveSettings() {
+            const defaultDir = document.getElementById('settingDefaultDir').value.trim();
+            const duration = parseInt(document.getElementById('settingDuration').value) || 60;
+            try {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ default_directory: defaultDir, analysis_duration: duration }),
+                });
+            } catch (err) {
+                showError('Failed to save settings: ' + err.message);
+            }
+            closeSettings();
+        }
+
+        // Shutdown
+        async function shutdownApp() {
+            if (!confirm('Shut down Song Analyzer?')) return;
+            try {
+                await fetch('/api/shutdown', { method: 'POST' });
+            } catch (err) {
+                // Expected — server is terminating
+            }
+            document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:1.1rem;">Song Analyzer has been shut down. You can close this tab.</div>';
+        }
+    </script>
+</body>
+</html>
