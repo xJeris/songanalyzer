@@ -1,6 +1,6 @@
 # Song Analyzer
 
-Analyze MP3 files for their **BPM** (beats per minute) and **beat offset** (lag in milliseconds) for use in the rhythm game [Dead As Disco](https://store.steampowered.com/app/3703800/Dead_As_Disco/).
+Analyze audio files (mp3, wav, ogg, flac) for their **BPM** (beats per minute) and **beat offset** (lag in milliseconds) for use in the rhythm game [Dead As Disco](https://store.steampowered.com/app/3703800/Dead_As_Disco/).
 
 ![Sample](https://github.com/xJeris/songanalyzer/blob/main/img/sample.png?raw=true)
 
