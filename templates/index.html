@@ -50,11 +50,11 @@
 
     <main>
         <section class="picker-panel">
-            <input type="file" id="fileInput" accept=".mp3,audio/mpeg" multiple hidden>
+            <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.ogg,audio/mpeg,audio/wav,audio/flac,audio/ogg" multiple hidden>
             <div id="dropZone" class="drop-zone">
                 <div class="drop-zone-content">
                     <div class="drop-icon">&#127925;</div>
-                    <p class="drop-text">Drag &amp; drop MP3 files here</p>
+                    <p class="drop-text">Drag &amp; drop audio files here</p>
                     <p class="drop-subtext">or</p>
                     <button class="browse-btn" onclick="document.getElementById('fileInput').click()">Browse Files</button>
                 </div>
@@ -134,13 +134,14 @@
 
             const files = [];
             for (const f of e.dataTransfer.files) {
-                if (f.name.toLowerCase().endsWith('.mp3')) {
+                const ext = f.name.toLowerCase().split('.').pop();
+                if (['mp3', 'wav', 'flac', 'ogg'].includes(ext)) {
                     files.push(f);
                 }
             }
 
             if (files.length === 0) {
-                showError('No MP3 files found. Please drop .mp3 files only.');
+                showError('No supported audio files found. Please drop .mp3, .wav, .flac, or .ogg files.');
                 return;
             }
 
