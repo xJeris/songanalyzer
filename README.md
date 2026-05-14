@@ -1,6 +1,6 @@
 # Song Analyzer
 
-Analyze audio files (mp3, wav, ogg, flac) for their **BPM** (beats per minute) and **beat offset** (lag in milliseconds) for use in the rhythm game [Dead As Disco](https://store.steampowered.com/app/3703800/Dead_As_Disco/).
+Analyze audio files (mp3, wav, ogg, flac, aac, m4a) for their **BPM** (beats per minute) and **beat offset** (lag in milliseconds) for use in the rhythm game [Dead As Disco](https://store.steampowered.com/app/3703800/Dead_As_Disco/).
 
 ![Sample](https://github.com/xJeris/songanalyzer/blob/main/img/sample.png?raw=true)
 
@@ -20,6 +20,7 @@ Analyze audio files (mp3, wav, ogg, flac) for their **BPM** (beats per minute) a
 - **Analysis history** capped at 50 entries with copy/export
 - **Configurable analysis duration** — default 60 seconds, or analyze the full song
 - **Persistent settings** saved to `config.json`
+- **AAC, M4A Support** If FFMpeg is installed
 
 ## Quick Start
 
